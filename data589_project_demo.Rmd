@@ -9,7 +9,6 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r}
-library(rgbif)
 library(sf)
 library(ggplot2)
 library(dplyr) # Load dplyr for filtering etc.
@@ -21,7 +20,6 @@ library(viridis)
 library(RColorBrewer)
 
 #library(mapview)
-
 ```
 
 ```{r}
@@ -350,13 +348,21 @@ ggplot() +
 ```
 
 ```{r}
+library(rayshader)
+
 # Step 3: Plot with ggplot2
 p <- ggplot() +
   geom_raster(data = elevation_df, aes(x = x, y = y, fill = elevation)) +
   geom_sf(data = window_sf, fill = NA, color = "black") + # Window outline
   scale_fill_viridis_c(option = "C") + # Nice color scale for elevation
   coord_sf() +
-  theme_minimal()
+  labs(title= "BC Elevation") +
+  theme(
+    plot.background = element_rect(
+      fill = "white",
+      colour = "white"
+    )
+  )
 
 # 2. Render in 3D
 plot_gg(p, 
@@ -366,12 +372,12 @@ plot_gg(p,
         scale = 300,       # how "tall" the elevation looks
         zoom = 0.7, 
         phi = 45, 
-        theta = 135)
+        theta = 135
+        )
 
 # 3. Optional: make it interactive
 rgl::rglwidget()
 ```
-
 
 
 ```{r}
@@ -564,6 +570,7 @@ plot(pcf_canis_lupus,
      lwd = 2,
      add = T)
 ```
+
 ```{r}
 #Estimate g corrected for inhomogeneity
 g_inhom <- pcfinhom(lupus_ppp)
@@ -778,8 +785,10 @@ hfi_clean <- eval.im(ifelse(is.na(hfi), mean_hfi, hfi))
 # NA with mean Dis_Water
 mean_dis_water <- mean(as.vector(as.matrix(dis_water)), na.rm = TRUE)
 dis_water_clean <- eval.im(ifelse(is.na(dis_water), mean_dis_water, dis_water))
+```
 
 
+```{r}
 clean_fit <- ppm(lupus_ppp ~ elev + I(forest_cover^2) + hfi + dis_water,
            data = list(elev = elev_clean,
                        forest_cover = forest_cover_clean,
@@ -787,6 +796,8 @@ clean_fit <- ppm(lupus_ppp ~ elev + I(forest_cover^2) + hfi + dis_water,
                        dis_water = dis_water_clean))
 clean_fit
 ```
+
+
 ```{r}
 #Calculate the partial residuals as a function of elevation
 par_res_elev <- parres(clean_fit, "elev")
@@ -829,6 +840,7 @@ residual_fit_clean = residuals(clean_fit, "pearson")
 
 plot(residual_fit_clean, main = "clean model Residual")
 ```
+
 ```{r}
 #Plot the model predictions
 plot(clean_fit,
@@ -889,6 +901,7 @@ plot(par_res_dist_water,
      lwd = 2,
      main = "",
      xlab = "Water Distance")
+
 ```
 
 ```{r}
@@ -926,6 +939,9 @@ fit_log_with_spline_clean<- ppm(lupus_ppp ~ bs(elev, 7) + bs(forest_cover, 8) + 
 
 fit_log_with_spline_clean
 ```
+
+
+
 ```{r}
 #Calculate the partial residuals as a function of elevation
 par_res_elev <- parres(fit_log_with_spline_clean, "elev")
@@ -961,11 +977,14 @@ plot(par_res_dist_water,
      main = "",
      xlab = "Water Distance")
 ```
+
+
 ```{r}
 residual_fit_spline_log_clean = residuals(fit_log_with_spline_clean, "pearson")
 
 plot(residual_fit_spline_log_clean, main = "clean spline log model Residual")
 ```
+
 ```{r}
 #Plot the model predictions
 plot(fit_log_with_spline_clean,
@@ -995,4 +1014,21 @@ max(models_aci)
 
 
 
-`
+```{r}
+#Plot the model predictions
+plot(clean_fit,
+     se = FALSE,
+     superimpose = FALSE,
+     main = "Estimated Canis Lupus intensity")
+
+#Overlay the B. pendula locations
+plot(lupus_ppp,
+     pch = 16,
+     cex = 0.6,
+     cols = "white",
+     add = TRUE)
+```
+
+
+
+
