@@ -1,0 +1,998 @@
+---
+title: "Untitled"
+output: html_document
+date: "2025-03-30"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(rgbif)
+library(sf)
+library(ggplot2)
+library(dplyr) # Load dplyr for filtering etc.
+library(rnaturalearth)
+
+library(raster)
+library(spatstat)
+library(viridis)
+library(RColorBrewer)
+
+#library(mapview)
+
+```
+
+```{r}
+# 1. Load the rgbif library
+# install.packages("rgbif") # Run this if you haven't installed it yet
+library(rgbif)
+
+# 2. Find the GBIF Taxon Key for Canis lupus
+species_key <- name_backbone(name = "Canis lupus", rank = "species")$usageKey
+
+# 3. Check if the key was found
+if (is.null(species_key)) {
+  stop("Could not find GBIF taxon key for Canis lupus. Check spelling or GBIF status.")
+} else {
+  print(paste("Found GBIF key for Canis lupus:", species_key))
+}
+```
+
+
+```{r}
+# 4. Define the geographic filters
+  # GBIF uses ISO 3166-1 alpha-2 country codes (CA for Canada)
+  target_country <- "CA"
+  # Use the full province name as GBIF generally expects
+  target_province <- "British Columbia"
+
+  # 5. Perform the occ_search with geographic filters
+  print(paste("Searching for Canis lupus occurrences in", target_province, ",", target_country, "..."))
+```
+
+```{r}
+# Increase the limit if you expect more records, but be mindful of occ_search limitations.
+  # hasCoordinate = TRUE is often useful for mapping/spatial analysis.
+  # return = "data" gives you the data frame directly.
+  search_result_list <- occ_search(
+    taxonKey = species_key,
+    country = target_country,
+    stateProvince = target_province,
+    limit = 1000000,        # Adjust this limit based on expected results / needs
+    hasCoordinate = TRUE, # Optional: Get only records with coordinates
+    # You could add other filters like year, basisOfRecord etc.
+    # basisOfRecord = "OBSERVATION" # Example: only observations
+    # year = "2020,2023"            # Example: only from 2020-2023
+  )
+```
+
+
+```{r}
+# --- Extract the data frame from the returned list ---
+# Check if the search returned results and specifically if the 'data' element exists
+if (!is.null(search_result_list) && !is.null(search_result_list$data)) {
+    lupus_bc_search_df <- search_result_list$data
+    print(paste("Retrieved", nrow(lupus_bc_search_df), "records via occ_search."))
+    print("First few records:")
+    print(head(lupus_bc_search_df))
+    dim(lupus_bc_search_df)
+
+    # Now you can proceed with creating the sf object and further analysis
+    # lupus_bc_sf <- st_as_sf(lupus_bc_search_df, ...) # etc.
+
+} else if (!is.null(search_result_list) && is.null(search_result_list$data)) {
+    print("Search successful, but no matching occurrence data found in the 'data' element.")
+    # You can inspect other parts of the list for clues:
+    # print(search_result_list$meta)
+} else {
+    print("Search failed or returned NULL. Check parameters or connection.")
+}
+```
+```{r}
+# Check column names
+colnames(lupus_bc_search_df)
+
+# Look at the first few rows of coordinate columns (replace names if different)
+head(lupus_bc_search_df[, c("decimalLongitude", "decimalLatitude")])
+
+# Check for missing coordinate data
+sum(is.na(lupus_bc_search_df$decimalLongitude))
+sum(is.na(lupus_bc_search_df$decimalLatitude))
+```
+
+```{r}
+# Remove rows with missing coordinates first (important!)
+lupus_bc_search_df <- lupus_bc_search_df %>%
+  filter(!is.na(decimalLongitude) & !is.na(decimalLatitude))
+
+# Convert to an sf object
+# Ensure coords are in the order: X (Longitude), Y (Latitude)
+# GBIF data typically uses WGS84 (EPSG:4326) coordinate reference system (CRS)
+lupus_bc_search_df <- st_as_sf(lupus_bc_search_df,
+                       coords = c("decimalLongitude", "decimalLatitude"),
+                       crs = 4326, # WGS84 CRS
+                       remove = FALSE) # Keep original coordinate columns if desired
+
+# Check the result
+print(lupus_bc_search_df)
+class(lupus_bc_search_df) # Should include "sf" and "data.frame"
+st_crs(lupus_bc_search_df) # Verify the CRS is set correctly
+```
+
+```{r}
+ # Simple plot using sf's default plot method
+plot(st_geometry(lupus_bc_search_df), pch = ".", main = "Canis lupus Occurrences in BC (WGS84)")
+
+# Nicer plot using ggplot2
+ggplot() +
+  geom_sf(data = lupus_bc_search_df, size = 0.5, alpha = 0.7) + # Plot the points
+  labs(title = "Canis lupus Occurrences in BC",
+       x = "Longitude", y = "Latitude") +
+  theme_minimal() # Use a minimal theme
+```
+
+```{r}
+# Load British Columbia shapefile from rnaturalearth
+bc_shapefile <- ne_states(country = "Canada", returnclass = "sf") %>%
+  filter(name == "British Columbia")
+
+# Plot Gray Wolf occurrences with BC map overlay
+ggplot() +
+  # Plot the BC boundary (light gray fill)
+  geom_sf(data = bc_shapefile, fill = "lightgray", color = "black") +
+  # Plot Gray Wolf occurrence points
+  geom_point(data = lupus_bc_search_df, aes(x = decimalLongitude, y = decimalLatitude),
+             alpha = 0.5, color = "blue") +
+  labs(title = "Gray Wolf Occurrences in British Columbia",
+       x = "Longitude", y = "Latitude") +
+  theme_minimal() +
+  theme(legend.position = "none")  # Remove legend if not needed
+```
+
+
+```{r}
+load("BC_Covariates.Rda")
+```
+
+```{r}
+proj_Args <- DATA$Window@proj4string@projargs
+
+print(proj_Args)
+```
+
+```{r}
+target_crs <- st_crs(DATA$Window)
+
+print(target_crs)
+```
+
+
+```{r}
+# Step 3: TRANSFORM the coordinates - This CHANGES the numbers
+lupus_bc_transformed <- st_transform(lupus_bc_search_df, crs = target_crs)
+
+```
+
+```{r}
+# Check the CRS of the transformed object
+print(st_crs(lupus_bc_transformed))
+```
+
+
+
+
+```{r}
+  # Plot the geometry of the transformed points
+  plot(st_geometry(lupus_bc_transformed), pch = '.') # pch='.' is good for many points
+  
+  # Optional: Plot your original window data first, then add points
+  # Make sure DATA$Window is also an sf object
+  window_sf <- st_as_sf(DATA$Window)
+  plot(st_geometry(window_sf), border = 'blue') # Plot window outline
+  plot(st_geometry(lupus_bc_transformed), pch = '.', add = TRUE, col = 'red') # Add points
+```
+
+
+```{r}
+# Plot the SpatialPolygons object
+plot(DATA$Window)
+
+# Add customization if desired
+plot(DATA$Window,
+     col = "lightblue",      # Fill color
+     border = "darkblue",    # Border color
+     main = "Study Area Window", # Title
+     xlab = "Easting (m)",     # X-axis label (adjust if units differ)
+     ylab = "Northing (m)")    # Y-axis label (adjust if units differ)
+```
+
+
+```{r}
+# --- Option 2a: Convert to sf and use sf's base plot ---
+# Convert the sp object to an sf object
+window_sf <- st_as_sf(DATA$Window)
+
+# Plot using sf's plot method (often adds graticules/axes automatically)
+plot(window_sf)
+
+# Plot just the geometry
+plot(st_geometry(window_sf), col = "lightgreen", border = "darkgreen")
+
+# --- Option 2b: Convert to sf and use ggplot2 ---
+# install.packages("ggplot2") # If not already installed
+library(ggplot2)
+
+# Assuming you converted using window_sf <- st_as_sf(DATA$Window)
+
+ggplot() +
+  geom_sf(data = window_sf, fill = "grey", color = "black") + # Plot the sf object
+  theme_minimal() +                                         # Apply a theme
+  ggtitle("Study Area Window") +
+  xlab("Easting (m)") + # Adjust labels as needed based on CRS
+  ylab("Northing (m)")
+```
+
+```{r}
+# Convert DATA$Window (sp object) to an sf object
+window_sf <- st_as_sf(DATA$Window)
+
+# --- Check CRSs match (Important!) ---
+# This should return TRUE if the transformation worked and window was read correctly
+print(paste("CRSs match:", identical(st_crs(window_sf), st_crs(lupus_bc_transformed))))
+
+# --- Plotting ---
+# 1. Plot the base layer (window polygon)
+#    Use st_geometry() if you only want the shape, not axes based on attributes
+plot(st_geometry(window_sf),
+     col = "grey85",          # Set fill color for the polygon
+     border = "grey40",      # Set border color for the polygon
+     main = "Lupus Occurrences in Study Window", # Title
+     xlab = "Easting (m)",    # Adjust axis labels if needed
+     ylab = "Northing (m)")
+
+# 2. Add the transformed points on top
+plot(st_geometry(lupus_bc_transformed),
+     pch = 19,               # Point character (19 is a solid circle)
+     col = "red",            # Color of the points
+     cex = 0.7,              # Size of the points
+     add = TRUE)             # *** Crucial: Add to the existing plot ***
+
+# Optional: Add a legend
+legend("topright", legend = "Lupus Occurrence", pch = 19, col = "red", pt.cex = 0.7)
+```
+
+```{r}
+# --- Ensure both objects are sf objects ---
+# lupus_bc_transformed is already sf
+
+# Convert DATA$Window (sp object) to an sf object
+window_sf <- st_as_sf(DATA$Window)
+
+# --- Check CRSs match (Important!) ---
+print(paste("CRSs match:", identical(st_crs(window_sf), st_crs(lupus_bc_transformed))))
+
+
+# --- Plotting with ggplot2 ---
+ggplot() +
+  # Add the window polygon layer first (bottom layer)
+  geom_sf(data = window_sf,
+          fill = "grey85",
+          color = "grey40") +
+
+  # Add the points layer on top
+  geom_sf(data = lupus_bc_transformed,
+          color = "red",
+          shape = 19,      # Shape (19 is solid circle)
+          size = 1.5) +    # Size
+
+  # Customize the plot appearance
+  ggtitle("Lupus Occurrences in Study Window") +
+  xlab("Easting (m)") + # Adjust axis labels if needed
+  ylab("Northing (m)") +
+  theme_minimal() +      # Or theme_bw(), theme_classic(), etc.
+  coord_sf(datum = st_crs(window_sf)) # Ensure correct coordinate system interpretation for axes/graticules
+```
+
+```{r}
+library(rayshader)
+
+# 1. Extract the matrix
+elevation_matrix <- DATA$Elevation$v
+
+# 2. Fill NA values (optional but recommended)
+# Here I replace NAs with the median elevation value
+median_value <- median(elevation_matrix, na.rm = TRUE)
+elevation_matrix[is.na(elevation_matrix)] <- median_value
+
+
+elevation_matrix %>%
+  sphere_shade(texture = "imhof1") %>%
+  add_water(detect_water(elevation_matrix), color = "imhof1") %>%
+  add_shadow(ray_shade(elevation_matrix, zscale = 3), 0.5) %>%
+  add_shadow(ambient_shade(elevation_matrix), 0) %>%
+  plot_3d(elevation_matrix, zscale = 10, fov = 0, theta = 135, zoom = 0.75, phi = 45, windowsize = c(1000, 800))
+
+
+#render_snapshot() Static Image
+
+# 4. Allow interaction
+rgl::rglwidget()
+```
+
+
+
+
+```{r}
+# Assuming your objects are like this:
+# my_list$Window     (spatial boundary)
+# my_list$Elevation  (raster)
+
+# Step 1: Convert Elevation raster to a data.frame
+elevation_df <- as.data.frame(DATA$Elevation, xy = TRUE)
+
+# The column with elevation values might be named after the raster layer
+colnames(elevation_df)
+# If needed, rename it for easier handling:
+names(elevation_df)[3] <- "elevation"
+
+# Step 2: Make sure Window is an sf object
+window_sf <- st_as_sf(DATA$Window)
+
+# Step 3: Plot with ggplot2
+ggplot() +
+  geom_raster(data = elevation_df, aes(x = x, y = y, fill = elevation)) +
+  geom_sf(data = window_sf, fill = NA, color = "black") + # Window outline
+  scale_fill_viridis_c(option = "C") + # Nice color scale for elevation
+  coord_sf() +
+  theme_minimal()
+```
+
+```{r}
+# Step 3: Plot with ggplot2
+p <- ggplot() +
+  geom_raster(data = elevation_df, aes(x = x, y = y, fill = elevation)) +
+  geom_sf(data = window_sf, fill = NA, color = "black") + # Window outline
+  scale_fill_viridis_c(option = "C") + # Nice color scale for elevation
+  coord_sf() +
+  theme_minimal()
+
+# 2. Render in 3D
+plot_gg(p, 
+        multicore = TRUE,  # faster if you have multiple cores
+        width = 5, 
+        height = 5, 
+        scale = 300,       # how "tall" the elevation looks
+        zoom = 0.7, 
+        phi = 45, 
+        theta = 135)
+
+# 3. Optional: make it interactive
+rgl::rglwidget()
+```
+
+
+
+```{r}
+# Extract the Window object
+Window <- DATA$Window
+
+# Extract coordinates from sf object
+coords <- st_coordinates(lupus_bc_transformed)
+
+# Define window (already projected)
+bc_window <-  as.owin(st_as_sf(Window))
+
+# Create ppp
+lupus_ppp <- ppp(x = coords[, 1],
+                 y = coords[, 2],
+                 window = bc_window)
+
+# Check it
+plot(lupus_ppp, main = "Wolf Sightings (ppp)")
+```
+
+```{r}
+# Check which points are inside the window
+inside_window <- inside.owin(coords[, 1], coords[, 2], bc_window)
+
+# Subset the coordinates to only include points inside the window
+coords_inside <- coords[inside_window, ]
+
+# Remove duplicates
+coords_inside <- unique(coords_inside)
+
+# Create ppp object with filtered coordinates
+lupus_ppp <- ppp(x = coords_inside[, 1],  # X (Eastings)
+                 y = coords_inside[, 2],  # Y (Northings)
+                 window = bc_window)  # Study region window
+
+# Check the ppp object
+plot(lupus_ppp, main = "Wolf Sightings (ppp)")
+
+```
+
+```{r}
+#Split into a 10 by 10 quadrat and count points
+Q <- quadratcount(lupus_ppp,
+                  nx = 2,
+                  ny = 2)
+
+#Plot the output 
+plot(lupus_ppp,
+     pch = 16,
+     cex = 0.5,
+     cols = "#046C9A",
+     main = "Quadrat Test Results")
+
+plot(Q, cex = 2, col = "red", add = T)
+```
+
+
+
+```{r}
+#Quadrat test of homogeneity 
+quadrat.test(quadratcount(lupus_ppp,
+                  nx = 2,
+                  ny = 2))
+```
+
+```{r}
+#Density estimation of lambda(u)
+lambda_u_hat <- density(lupus_ppp)
+
+#Plot the output Note the use of image = TRUE
+plot(lambda_u_hat,
+     main = "Kernel estimate of Canis Lupus intensity")
+
+plot(lupus_ppp,
+     pch = 16,
+     cex = 0.6,
+     cols = "white",
+     add = T)
+```
+
+
+```{r}
+
+window <-as.owin(st_as_sf(DATA$Window))
+# Estimate R
+R <- bw.ppl(lupus_ppp)
+
+#Calculate test statistic
+LR <- scanLRTS(lupus_ppp, r = R)
+
+#Plot the output 
+plot(LR,
+     main = "hotspot analysis for canis lupus")
+
+plot(window, add = TRUE, border = "white", lwd = 2)
+```
+
+
+```{r}
+#Compute local p-values
+pvals <- eval.im(pchisq(LR,
+                        df = 1,
+                        lower.tail = FALSE))
+
+
+#Plot the output
+plot(pvals, main = "Local p-values")
+```
+
+
+```{r}
+#Estimate the empirical k-function
+k_bei <- Kest(lupus_ppp)
+
+#Display the object
+k_bei
+
+#visualise the results
+plot(k_bei,
+     main = "Ripley's K-function",
+     lwd = 2)
+```
+
+```{r}
+# Bootstrapped CIs
+# rank = 1 means the max and min
+# Border correction is to correct for edges around the window
+# values will be used for CI
+E_bei <- envelope(lupus_ppp,
+                  Kest,
+                  correction="border",
+                  rank = 1,
+                  nsim = 19,
+                  fix.n = T)
+
+# visualise the results
+plot(E_bei,
+     main = "Ripley's K-function with Envelopes",
+     lwd = 2)
+```
+
+```{r}
+#Estimate intensity
+lambda_canis_lupus <- density(lupus_ppp, bw.ppl)
+
+Kinhom_canis_lupus <- Kinhom(lupus_ppp, lambda_canis_lupus)
+
+Kinhom_canis_lupus
+
+# visualise the results
+plot(Kinhom_canis_lupus,
+     theo ~ r,
+     main = "",
+     col = "grey70",
+     lty = "dashed",
+     lwd = 2)
+
+plot(Kinhom_canis_lupus,
+     border ~ r,
+     col = c("#046C9A"),
+     lwd = 2,
+     add = T)
+```
+
+
+```{r}
+# Estimate the g function
+pcf_canis_lupus <- pcf(lupus_ppp)
+
+pcf_canis_lupus
+
+# Default plot method
+plot(pcf_canis_lupus)
+```
+
+```{r}
+# visualise the results
+plot(pcf_canis_lupus,
+     theo ~ r,
+     ylim = c(0,20),
+     main = "",
+     col = "grey70",
+     lwd = 2,
+     lty = "dashed")
+
+plot(pcf_canis_lupus,
+     iso ~ r,
+     col = c("#046C9A"),
+     lwd = 2,
+     add = T)
+```
+```{r}
+#Estimate g corrected for inhomogeneity
+g_inhom <- pcfinhom(lupus_ppp)
+
+print(g_inhom)
+
+plot(g_inhom)
+```
+
+
+```{r}
+# Estimate g corrected for inhomogeneity
+g_inhom <- pcfinhom(lupus_ppp)
+
+# visualise the results
+plot(g_inhom,
+     theo ~ r,
+     ylim = c(0,9),
+     main = "",
+     col = "grey70",
+     lwd = 2,
+     lty = "dashed")
+
+plot(g_inhom,
+     iso ~ r,
+     col = c("#046C9A"),
+     lwd = 2,
+     add = T)
+```
+
+
+
+```{r}
+# Estimate the homogeneous pair correlation function with simulation envelopes
+set.seed(123) # Set seed for reproducibility
+g_hom <- envelope(lupus_ppp, fun = pcf, nsim = 19)
+
+# Plot homogeneous pair correlation function
+plot(g_hom, main = "Homogeneous Pair Correlation Function", 
+     xlim = c(0, max(g_hom$r)), legend = TRUE)
+```
+
+
+```{r}
+# Estimate the inhomogeneous pair correlation function with simulation envelopes
+set.seed(123) # Set seed for reproducibility
+g_inhom <- envelope(lupus_ppp, fun = pcfinhom, nsim = 19, simulate = expression(rpoispp(density.ppp(lupus_ppp))))
+
+plot(g_inhom, main = "Inhomogeneous Pair Correlation Function", 
+     xlim = c(0, max(g_inhom$r)), legend = TRUE)
+```
+
+
+```{r}
+elev = DATA$Elevation
+forest_cover = DATA$Forest
+hfi = DATA$HFI
+dis_water = DATA$Dist_Water
+```
+
+
+```{r}
+#Estimate Rho for elevation
+rho_elev <- rhohat(lupus_ppp,elev)
+
+plot(rho_elev,
+     main = "Intensity of canis_lupus as a Function of Elevation",
+     xlab = "Elevation (m)")
+```
+
+
+```{r}
+#Estimate Rho for forest
+rho_forest <- rhohat(lupus_ppp, forest_cover)
+
+plot(rho_forest,
+     main = "Intensity of canis_lupus as a Function of Forest",
+     xlab = "Forest Cover")
+```
+
+
+```{r}
+#Estimate Rho for hfi
+rho_hfi <- rhohat(lupus_ppp,hfi)
+
+plot(rho_hfi,
+     main = "Intensity of canis_lupus as a Function of HFI",
+     xlab = "HFI")
+```
+
+```{r}
+#Estimate Rho for dis_water
+rho_dist_water <- rhohat(lupus_ppp, dis_water)
+
+plot(rho_dist_water,
+     main = "Intensity of canis_lupus as a Function of Distance_to_Water",
+     xlab = "Dist Water")
+```
+
+```{r}
+#Fit the PPP model
+fit <- ppm(lupus_ppp ~ elev + I(forest_cover^2) + hfi + dis_water)
+
+fit
+```
+
+
+```{r}
+#Calculate the partial residuals as a function of elevation
+par_res_elev <- parres(fit, "elev")
+
+#Calculate the relative intensity as a function of cover
+par_res_cover <- parres(fit, "forest_cover")
+
+#Calculate the partial residuals as a function of elevation
+par_res_hfi <- parres(fit, "hfi")
+
+#Calculate the relative intensity as a function of cover
+par_res_dist_water <- parres(fit, "dis_water")
+
+#Side by side plotting
+plot(par_res_elev,
+     legend = FALSE,
+     lwd = 2,
+     main = "",
+     xlab = "Elevation (m)")
+plot(par_res_cover,
+     legend = FALSE,
+     lwd = 2,
+     main = "",
+     xlab = "Forest Cover")
+plot(par_res_hfi,
+     legend = FALSE,
+     lwd = 2,
+     main = "",
+     xlab = "HFI")
+plot(par_res_dist_water,
+     legend = FALSE,
+     lwd = 2,
+     main = "",
+     xlab = "Water Distance")
+```
+
+```{r}
+# NA with mean Forest Cover
+mean_forest_cover <- mean(as.vector(as.matrix(forest_cover)), na.rm = TRUE)
+forest_cover_clean <- eval.im(ifelse(is.na(forest_cover), mean_forest_cover, forest_cover))
+# model
+forest_cover_model <- ppm(lupus_ppp, ~ forest_cover, covariates = list(forest_cover = forest_cover_clean))
+
+print(forest_cover_model)
+
+```
+
+```{r}
+forest_cover_residuals <- residuals(forest_cover_model, type = "pearson")
+forest_cover_residuals$v[!is.finite(forest_cover_residuals$v)] <- NA
+plot(forest_cover_residuals, 
+     main = "Residuals - forest_cover Model", 
+     na.col = "transparent")
+```
+
+```{r}
+# NA with mean elevation
+mean_elev <- mean(as.vector(as.matrix(elev)), na.rm = TRUE)
+elev_clean <- eval.im(ifelse(is.na(elev), mean_elev, elev))
+# model
+elevation_model <- ppm(lupus_ppp, ~ elev, covariates = list(elev = elev_clean))
+print(elevation_model)
+```
+
+
+```{r}
+Elevation_residuals <- residuals(elevation_model, type = "pearson")
+Elevation_residuals$v[!is.finite(Elevation_residuals$v)] <- NA
+plot(Elevation_residuals, 
+     main = "Residuals - Elevation Model", 
+     na.col = "transparent")
+```
+
+```{r}
+# NA with mean hfi
+mean_hfi <- mean(as.vector(as.matrix(hfi)), na.rm = TRUE)
+hfi_clean <- eval.im(ifelse(is.na(hfi), mean_hfi, hfi))
+# model
+hfi_model <- ppm(lupus_ppp, ~ hfi, covariates = list(hfi = hfi_clean))
+print(elevation_model)
+```
+
+```{r}
+hfi_residuals <- residuals(hfi_model, type = "pearson")
+hfi_residuals$v[!is.finite(hfi_residuals$v)] <- NA
+plot(hfi_residuals, 
+     main = "Residuals - hfi Model", 
+     na.col = "transparent")
+```
+
+
+```{r}
+# NA with mean Forest Cover
+mean_forest_cover <- mean(as.vector(as.matrix(forest_cover)), na.rm = TRUE)
+forest_cover_clean <- eval.im(ifelse(is.na(forest_cover), mean_forest_cover, forest_cover))
+
+# NA with mean elevation
+mean_elev <- mean(as.vector(as.matrix(elev)), na.rm = TRUE)
+elev_clean <- eval.im(ifelse(is.na(elev), mean_elev, elev))
+
+# NA with mean HFI
+mean_hfi <- mean(as.vector(as.matrix(hfi)), na.rm = TRUE)
+hfi_clean <- eval.im(ifelse(is.na(hfi), mean_hfi, hfi))
+
+# NA with mean Dis_Water
+mean_dis_water <- mean(as.vector(as.matrix(dis_water)), na.rm = TRUE)
+dis_water_clean <- eval.im(ifelse(is.na(dis_water), mean_dis_water, dis_water))
+
+
+clean_fit <- ppm(lupus_ppp ~ elev + I(forest_cover^2) + hfi + dis_water,
+           data = list(elev = elev_clean,
+                       forest_cover = forest_cover_clean,
+                       hfi = hfi_clean,
+                       dis_water = dis_water_clean))
+clean_fit
+```
+```{r}
+#Calculate the partial residuals as a function of elevation
+par_res_elev <- parres(clean_fit, "elev")
+
+#Calculate the relative intensity as a function of cover
+par_res_cover <- parres(clean_fit, "forest_cover")
+
+#Calculate the partial residuals as a function of elevation
+par_res_hfi <- parres(clean_fit, "hfi")
+
+#Calculate the relative intensity as a function of cover
+par_res_dist_water <- parres(clean_fit, "dis_water")
+
+#Side by side plotting
+plot(par_res_elev,
+     legend = FALSE,
+     lwd = 2,
+     main = "",
+     xlab = "Elevation (m)")
+plot(par_res_cover,
+     legend = FALSE,
+     lwd = 2,
+     main = "",
+     xlab = "Forest Cover")
+plot(par_res_hfi,
+     legend = FALSE,
+     lwd = 2,
+     main = "",
+     xlab = "HFI")
+plot(par_res_dist_water,
+     legend = FALSE,
+     lwd = 2,
+     main = "",
+     xlab = "Water Distance")
+
+```
+
+```{r}
+residual_fit_clean = residuals(clean_fit, "pearson")
+
+plot(residual_fit_clean, main = "clean model Residual")
+```
+```{r}
+#Plot the model predictions
+plot(clean_fit,
+     se = FALSE,
+     superimpose = FALSE)
+
+#Overlay the B. pendula locations
+plot(lupus_ppp,
+     pch = 16,
+     cex = 0.6,
+     cols = "white",
+     add = TRUE)
+```
+
+
+```{r}
+library(splines)
+
+#Fit the PPP model
+fit_spline_clean <- ppm(lupus_ppp ~ bs(elev, 7) + bs(forest_cover, 8) + bs(hfi, 9) + bs(dis_water, 8), data = list(elev = elev_clean, forest_cover = forest_cover_clean, hfi = hfi_clean, dis_water = dis_water_clean))
+
+
+fit_spline_clean
+```
+
+
+```{r}
+#Calculate the partial residuals as a function of elevation
+par_res_elev <- parres(fit_spline_clean, "elev")
+
+#Calculate the relative intensity as a function of cover
+par_res_cover <- parres(fit_spline_clean, "forest_cover")
+
+#Calculate the partial residuals as a function of elevation
+par_res_hfi <- parres(fit_spline_clean, "hfi")
+
+#Calculate the relative intensity as a function of cover
+par_res_dist_water <- parres(fit_spline_clean, "dis_water")
+
+#Side by side plotting
+plot(par_res_elev,
+     legend = FALSE,
+     lwd = 2,
+     main = "",
+     xlab = "Elevation (m)")
+plot(par_res_cover,
+     legend = FALSE,
+     lwd = 2,
+     main = "",
+     xlab = "Forest Cover")
+plot(par_res_hfi,
+     legend = FALSE,
+     lwd = 2,
+     main = "",
+     xlab = "HFI")
+plot(par_res_dist_water,
+     legend = FALSE,
+     lwd = 2,
+     main = "",
+     xlab = "Water Distance")
+```
+
+```{r}
+residual_fit_spline_clean = residuals(fit_spline_clean, "pearson")
+
+plot(residual_fit_spline_clean, main = "clean spline model Residual")
+```
+
+
+```{r}
+#Plot the model predictions
+plot(fit_spline_clean,
+     se = FALSE,
+     superimpose = FALSE)
+
+#Overlay the B. pendula locations
+plot(lupus_ppp,
+     pch = 16,
+     cex = 0.6,
+     cols = "white",
+     add = TRUE)
+
+```
+
+
+
+```{r}
+# Apply log transformation to dis_water
+dis_water_log <- log(dis_water_clean + 1)
+
+hfi_log <- log(hfi_clean + 1)
+
+# Fit the model with log-transformed dis_water
+fit_log_with_spline_clean<- ppm(lupus_ppp ~ bs(elev, 7) + bs(forest_cover, 8) + bs(hfi_log, df = 5) + bs(dis_water_log, df = 6), data = list(elev = elev_clean, forest_cover = forest_cover_clean, hfi = hfi_log, dis_water = dis_water_log))
+
+fit_log_with_spline_clean
+```
+```{r}
+#Calculate the partial residuals as a function of elevation
+par_res_elev <- parres(fit_log_with_spline_clean, "elev")
+
+#Calculate the relative intensity as a function of cover
+par_res_cover <- parres(fit_log_with_spline_clean, "forest_cover")
+
+#Calculate the partial residuals as a function of elevation
+par_res_hfi <- parres(fit_log_with_spline_clean, "hfi_log")
+
+#Calculate the relative intensity as a function of cover
+par_res_dist_water <- parres(fit_log_with_spline_clean, "dis_water_log")
+
+#Side by side plotting
+plot(par_res_elev,
+     legend = FALSE,
+     lwd = 2,
+     main = "",
+     xlab = "Elevation (m)")
+plot(par_res_cover,
+     legend = FALSE,
+     lwd = 2,
+     main = "",
+     xlab = "Forest Cover")
+plot(par_res_hfi,
+     legend = FALSE,
+     lwd = 2,
+     main = "",
+     xlab = "HFI")
+plot(par_res_dist_water,
+     legend = FALSE,
+     lwd = 2,
+     main = "",
+     xlab = "Water Distance")
+```
+```{r}
+residual_fit_spline_log_clean = residuals(fit_log_with_spline_clean, "pearson")
+
+plot(residual_fit_spline_log_clean, main = "clean spline log model Residual")
+```
+```{r}
+#Plot the model predictions
+plot(fit_log_with_spline_clean,
+     se = FALSE,
+     superimpose = FALSE)
+
+#Overlay the B. pendula locations
+plot(lupus_ppp,
+     pch = 16,
+     cex = 0.6,
+     cols = "white",
+     add = TRUE)
+```
+
+```{r}
+
+#AIC values
+models_aci <- cbind(AIC(clean_fit), AIC(fit_spline_clean), AIC(fit_log_with_spline_clean))
+
+print(models_aci)
+```
+
+
+```{r}
+max(models_aci)
+```
+
+
+
+`
