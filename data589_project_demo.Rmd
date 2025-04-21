@@ -501,6 +501,26 @@ plot(k_bei,
      main = "Ripley's K-function",
      lwd = 2)
 ```
+**Blue Line:** This represents the theoretical K-function under Complete Spatial Randomness (CSR). For a Poission process. this line serves as the baseline for comparision.
+
+**Black Line():** this is the estimated K-function for ```lupus_ppp``` data using the isotropic edge correction.
+
+**pink Dashed Line:** This is the estimated K-function for ```lupus_ppp``` data using the translational edge correction.
+
+**Green Line:** this is the estimated K-function for ```lupus_ppp``` data using the border method edge correction.
+
+
+**Interpreting The Plot:**
+
+- Small Distances (Low r) : All the estimated K-functions (black, pink, and green lines) start close or slightly above the blue line at very small distances. This might suggest a slight tendency for clustering at very small scales.
+
+- Intermediate Distances(Medium r) : As the distance **r** increases, the black lines rise considerably **above** the blue line. This indicates **significant clustering** in the ```lupus_ppp``` point pattern at these intermediate distances (roughly from the beginning up tto around 300,000 on the x-axis). the green line also goes the blue line, supporting clustering, but to a lesser extent at larger distances.
+
+- Large Distances (High r) : At the largest distances shown, the black line and pink lines remain well **above** the blue line, suggesting that the clustering persists at larger scales. The green line appears to flattenout at the higher end of the distance range.
+
+**In summary:**
+
+The ```lupus_ppp``` point pattern shows evidence of **significant spatial clustering** over a wide range of distances. The estimated number of neighboring points within a given radius is consistently higher than what would be expected under a completely random distribution.
 
 ```{r}
 # Bootstrapped CIs
@@ -518,9 +538,8 @@ E_bei <- envelope(lupus_ppp,
 plot(E_bei,
      main = "Ripley's K-function with Envelopes",
      lwd = 2)
-```
 
-```{r}
+
 #Estimate intensity
 lambda_canis_lupus <- density(lupus_ppp, bw.ppl)
 
@@ -543,6 +562,11 @@ plot(Kinhom_canis_lupus,
      add = T)
 ```
 
+**Interpretation**
+
+- For small distances (up to roughly 50,000), the blue line is very close to the grey dashed line. This suggests that at these small scales, the observed pattern is consistent with an inhomogeneous Poisson process. The estimated intensity explains the spatial pattern at this local level.
+
+- For distances greater than approximately 50,000, the blue line consistently rises above the grey dashed line. This indicates clustering in the wolf point pattern at these intermediate and larger spatial scales that is not explained by the spatial variation in intensity alone.
 
 ```{r}
 # Estimate the g function
@@ -552,9 +576,7 @@ pcf_canis_lupus
 
 # Default plot method
 plot(pcf_canis_lupus)
-```
 
-```{r}
 # visualise the results
 plot(pcf_canis_lupus,
      theo ~ r,
@@ -570,36 +592,13 @@ plot(pcf_canis_lupus,
      lwd = 2,
      add = T)
 ```
+- **Very Small Distances (r close to 0):** Both the black and pink lines show a very tall peak that goes far above 1. This indicates very strong clustering at very short distances. Wolves are highly likely to be found in close proximity to other wolves.
 
-```{r}
-#Estimate g corrected for inhomogeneity
-g_inhom <- pcfinhom(lupus_ppp)
-
-print(g_inhom)
-
-plot(g_inhom)
-```
+- **Intermediate Distances (roughly 20,000 to 50,000 on the x-axis):** After the initial peak, both estimated PCF lines drop below 1. This suggests a zone of regularity or inhibition at these distances. There are fewer pairs of wolves at these separations than expected under CSR. This could imply some spacing or avoidance after the initial close-range clustering.
 
 
-```{r}
-# Estimate g corrected for inhomogeneity
-g_inhom <- pcfinhom(lupus_ppp)
+- **Larger Distances (beyond approximately 80,000 on the x-axis):** For distances greater than around 80,000, both the black and pink lines generally stay close to the green dotted line at 1. This suggests that at these larger scales, the spatial pattern is largely consistent with Complete Spatial Randomness. The strong short-range interactions do not extend to these broader scales.
 
-# visualise the results
-plot(g_inhom,
-     theo ~ r,
-     ylim = c(0,9),
-     main = "",
-     col = "grey70",
-     lwd = 2,
-     lty = "dashed")
-
-plot(g_inhom,
-     iso ~ r,
-     col = c("#046C9A"),
-     lwd = 2,
-     add = T)
-```
 
 
 
@@ -612,7 +611,11 @@ g_hom <- envelope(lupus_ppp, fun = pcf, nsim = 19)
 plot(g_hom, main = "Homogeneous Pair Correlation Function", 
      xlim = c(0, max(g_hom$r)), legend = TRUE)
 ```
+- **Very Small Distances (r close to 0):** The black line shoots up to a very high value and goes far **above the upper boundary of the grey simulation envelope**. This indicates **statistically significant clustering** at very short distances. The wolves are significantly more aggregated at fine scales than expected under CSR.
 
+- **Intermediate Distances (approximately 20,000 to 80,000 on the x-axis):** After the initial peak, the black line drops sharply and goes **below the lower boundary of the grey simulation envelope**. It stays below the lower envelope for a considerable range of distances. This indicates **statistically significant regularity or inhibition** at these intermediate distances. The wolves are significantly more spread out at these separations than expected under CSR.
+
+- **Larger Distances (beyond approximately 80,000):** The black line fluctuates and appears to return to within the grey simulation envelope at larger distances. This suggests that at these scales, the observed spatial pattern is **not statistically significantly different from Complete Spatial Randomness**.
 
 ```{r}
 # Estimate the inhomogeneous pair correlation function with simulation envelopes
@@ -622,7 +625,9 @@ g_inhom <- envelope(lupus_ppp, fun = pcfinhom, nsim = 19, simulate = expression(
 plot(g_inhom, main = "Inhomogeneous Pair Correlation Function", 
      xlim = c(0, max(g_inhom$r)), legend = TRUE)
 ```
+- **Very Small Distances (r close to 0):** The black line shows a very tall peak that goes far **above the upper boundary of the grey simulation envelope**. This indicates **statistically significant clustering** at very short distances, **even after accounting for the estimated spatial variation in intensity**. The wolves are significantly more aggregated at fine scales than expected based on the estimated density surface alone.
 
+Intermediate Distances (approximately 20,000 onwards): After the initial strong peak, the black line drops sharply. For distances greater than approximately 20,000, the black line appears to fall **within or very close to the boundaries of the grey simulation envelope.**
 
 ```{r}
 elev = DATA$Elevation
@@ -640,8 +645,17 @@ plot(rho_elev,
      main = "Intensity of canis_lupus as a Function of Elevation",
      xlab = "Elevation (m)")
 ```
+- The plot shows a very high estimated intensity of wolves at very low elevations (close to 0 meters).
 
+- As the elevation increases, the estimated intensity drops sharply and quickly approaches zero.
+  
+- For most of the elevation range (above a few hundred meters), the estimated intensity is very -  low, suggesting that wolves are much less likely to be found at higher elevations in your study area.
 
+In summary, the plot suggests that the intensity (density) of wolves in our study area is strongly associated with elevation:
+
+- Wolves are highly concentrated at very low elevations.
+- Their density drops dramatically as elevation increases.
+- At higher elevations, the density of wolves is very low.
 ```{r}
 #Estimate Rho for forest
 rho_forest <- rhohat(lupus_ppp, forest_cover)
@@ -650,8 +664,21 @@ plot(rho_forest,
      main = "Intensity of canis_lupus as a Function of Forest",
      xlab = "Forest Cover")
 ```
+- The plot shows a relatively low estimated intensity of wolves when forest cover is very low (close to 0%).
 
+- As forest cover increases, the estimated intensity generally increases, reaching a peak around 60-70% forest cover.
 
+- Beyond this peak, as forest cover approaches 100%, the estimated intensity appears to decrease slightly.
+
+In summary, the plot suggests the following about the relationship between wolf intensity and forest cover in our study area:
+
+- Wolves appear to prefer areas with moderate to high forest cover (around 60-70%), as the estimated intensity is highest in this range.
+
+- The intensity is lower in areas with very low forest cover.
+
+- There might be a slight decrease in intensity in areas with very high (almost 100%) forest cover, although this part of the trend has a wider confidence interval, suggesting more uncertainty.
+
+- Overall, forest cover seems to be an important factor influencing the spatial distribution of wolves in our study area.
 ```{r}
 #Estimate Rho for hfi
 rho_hfi <- rhohat(lupus_ppp,hfi)
@@ -661,6 +688,26 @@ plot(rho_hfi,
      xlab = "HFI")
 ```
 
+- The plot shows a very low estimated intensity of wolves when the HFI is very low (close to 0).
+
+- As the HFI increases from 0 to around 0.4, the estimated intensity gradually increases.
+
+- Between an HFI of approximately 0.4 and 0.6, the estimated intensity appears to plateau or slightly decrease.
+
+- Beyond an HFI of around 0.6, the estimated intensity shows a more substantial increase, peaking around an HFI of 0.8 to 0.9.
+
+- For the highest HFI values (close to 1.0), the intensity seems to drop off again, although the confidence interval is quite wide in this region.
+
+
+In summary, the plot suggests the following about the relationship between wolf intensity and the Human Footprint Index in our study area:
+
+- Wolves appear to have a low density in areas with very low human influence (low HFI).
+
+- The density tends to increase with increasing human influence up to a certain point (around HFI 0.6).
+
+- Interestingly, the highest estimated densities are observed at relatively high HFI values (around 0.8-0.9), suggesting that wolves might be utilizing areas with significant human influence to some extent. However, the wide confidence interval in this region indicates this finding should be interpreted with caution.
+
+- The density appears to decrease again in areas with the highest levels of human impact.
 ```{r}
 #Estimate Rho for dis_water
 rho_dist_water <- rhohat(lupus_ppp, dis_water)
@@ -669,6 +716,26 @@ plot(rho_dist_water,
      main = "Intensity of canis_lupus as a Function of Distance_to_Water",
      xlab = "Dist Water")
 ```
+
+- The plot shows a relatively low estimated intensity of wolves at very close distances to water (distance close to 0).
+
+- As the distance to water increases slightly, the estimated intensity appears to increase, showing a peak around a distance of roughly 2,000 to 3,000 units.
+
+- The intensity then decreases and fluctuates at lower levels between distances of approximately 3,000 and 8,000.
+
+- There is a prominent peak in estimated intensity at a distance of around 9,000 to 10,000 units from water. This suggests a higher likelihood of finding wolves at this particular distance.
+
+- Beyond a distance of around 12,000 units, the estimated intensity drops to a very low level and stays close to zero for the rest of the plotted range.
+
+In summary, the plot suggests the following about the relationship between wolf intensity and distance to water in our study area:
+
+- Wolves do not appear to have the highest density very close to water sources.
+
+- There are peaks in wolf intensity at certain distances from water, notably around 2,000-3,000 units and a more prominent peak around 9,000-10,000 units.
+
+- The density of wolves is very low at distances greater than approximately 12,000 units from water.
+
+- The relationship between wolf intensity and distance to water is complex and non-linear, with preferences for certain intermediate distances.
 
 ```{r}
 #Fit the PPP model
@@ -839,14 +906,11 @@ plot(par_res_dist_water,
 residual_fit_clean = residuals(clean_fit, "pearson")
 
 plot(residual_fit_clean, main = "clean model Residual")
-```
 
-```{r}
 #Plot the model predictions
 plot(clean_fit,
      se = FALSE,
      superimpose = FALSE)
-
 #Overlay the B. pendula locations
 plot(lupus_ppp,
      pch = 16,
@@ -854,6 +918,11 @@ plot(lupus_ppp,
      cols = "white",
      add = TRUE)
 ```
+
+- The Pearson residual plot indicates that while fitted PPM model captures some of the factors influencing wolf distribution, there is **remaining unexplained spatial variation**, particularly in areas where the model is over-predicting wolf occurrences (the regions with negative residuals). This suggests that we might consider exploring additional covariates or model structures to improve the fit and better explain the spatial patterns of wolves in these specific areas. A perfectly fitted model would ideally show residuals that are spatially random.
+
+- The fitted model (clean_fit) suggests that the combination of environmental conditions most suitable for lupus_ppp  are relatively rare and geographically concentrated in small areas in the southwest. The model predicts much lower suitability across most of the landscape. The fact that many observed points fall in areas predicted to have low intensity might indicate that the model isn't perfectly capturing all factors influencing the distribution, potentially leading to underprediction in those specific spots.
+
 
 
 ```{r}
@@ -908,10 +977,7 @@ plot(par_res_dist_water,
 residual_fit_spline_clean = residuals(fit_spline_clean, "pearson")
 
 plot(residual_fit_spline_clean, main = "clean spline model Residual")
-```
 
-
-```{r}
 #Plot the model predictions
 plot(fit_spline_clean,
      se = FALSE,
@@ -923,10 +989,24 @@ plot(lupus_ppp,
      cex = 0.6,
      cols = "white",
      add = TRUE)
-
 ```
+**Striking Similarity:**
+The overall spatial pattern of residuals is remarkably similar to the previous model's ("clean model Residual").
+
+**Interior:**
+Much of the interior remains yellow/orange, indicating residuals close to zero. The spline model, like the simpler model, fits reasonably well here.
+
+**Coast & Southeast:**
+These areas are still predominantly magenta/purple, indicating significant overprediction by the model. The slightly more negative values on the color scale suggest the overprediction might even be slightly more pronounced in some spots according to this model.
+
+**Circles (Raw Residuals):**
+Similar pattern to before, with large circles (large magnitude raw residuals) concentrated in the southeast, but also some noticeable ones in the interior, suggesting localized deviations.
 
 
+```{r}
+anova(clean_fit, fit_spline_clean, test = "LRT")
+```
+- The Likelihood Ratio Test strongly suggests that the relationships between the intensity of wolf occurrences and  covariates (elevation, forest cover, HFI, and distance to water) are likely **non-linear**. Using flexible functions like splines in our model is more appropriate for capturing these complex relationships than using simple linear terms
 
 ```{r}
 # Apply log transformation to dis_water
@@ -983,9 +1063,7 @@ plot(par_res_dist_water,
 residual_fit_spline_log_clean = residuals(fit_log_with_spline_clean, "pearson")
 
 plot(residual_fit_spline_log_clean, main = "clean spline log model Residual")
-```
 
-```{r}
 #Plot the model predictions
 plot(fit_log_with_spline_clean,
      se = FALSE,
@@ -998,37 +1076,190 @@ plot(lupus_ppp,
      cols = "white",
      add = TRUE)
 ```
+**Comparison to Previous Spline Model:**
+The most striking observation is how incredibly similar this residual plot looks to the previous one ("clean spline model Residual") that didn't use the log transformations for hfi and dis_water.
+
+**Spatial Pattern:**
+The locations of the yellow/orange areas (good fit) and the magenta/purple areas (overprediction) are virtually unchanged. Strong negative residuals persist along the coast and in the southeast corner.
+
+**Circles:** The pattern and relative sizes of the circles representing raw residuals also appear unchanged.
+
+
+**Predominantly Low Intensity:** 
+Similar to the trend plot from the simpler ```clean_fit model```, the vast majority of the study area is dark blue/purple. The model predicts a very low probability of point occurrence across most of the landscape.
+
+**Localized Hotspots:** 
+Small areas, primarily concentrated in the southwest (coastal/border region), show higher predicted intensities (magenta/yellow). These are where the model identifies the most favorable conditions based on the specific covariate values and the fitted spline relationships.
+
+
+**Observed Data (White Dots):**
+The overlay shows that while some points fall near the predicted higher-intensity areas, many points are located within the extensive dark blue regions where the model predicts very low intensity.
+
+
+
+**Overall Conclusion:**
+- Using splines and log transformations for some covariates did not fundamentally change the model's overall prediction of the spatial trend compared to the simpler model.
+
+- The model consistently predicts that the conditions suitable for lupus_ppp points are rare and concentrated in small areas (primarily southwest).
+
+- It predicts very low suitability across most of the region.
+
+- The discrepancy between the predicted low intensity and the presence of observed points in large parts of the interior persists.
+
+**Connecting to the Residual Plot:**
+This fitted trend plot is consistent with the corresponding "clean spline log model Residual" plot.
+
+- The trend plot shows low predicted intensity along the coast and in the southeast. The residual plot showed strong negative residuals there, meaning even this low predicted intensity was still an overprediction compared to reality.
+
+- The trend plot shows low predicted intensity in the interior. The residual plot showed residuals closer to zero there, indicating a better match (predicted low intensity aligns with observed low density).
+
+In essence, making the model more flexible with splines and applying log transformations didn't resolve the core issues identified earlier. The model still struggles to accurately capture the distribution, particularly in the areas where it significantly overpredicts (coast/SE).
+
 
 ```{r}
+anova(fit_log_with_spline_clean, fit_spline_clean, test = "LRT")
+``` 
+**Conclusion:**
+- The p-value (0.9293) is very large (much larger than typical significance levels like 0.05).
+Therefore, **we fail to reject the null hypothesis**.
 
-#AIC values
-models_aci <- cbind(AIC(clean_fit), AIC(fit_spline_clean), AIC(fit_log_with_spline_clean))
+- This means there is **no statistically significant evidence** to suggest that Model 2 (splines on original ```hfi```/```dis_water``` with higher df) fits the data significantly better than Model 1 (splines on log-transformed ```hfi```/```dis_water``` with lower df).
 
-print(models_aci)
+- Log-transforming ```hfi``` and ```dis_water``` (and adjusting the spline complexity slightly) did **not** result in a significantly worse fit compared to using splines on the original scales with higher complexity. Neither model is statistically superior to the other based on this test.
+
+Consistency with Visual Checks: This statistical result perfectly aligns with our visual comparison of the residual plots for``` fit_spline_clean``` and ```fit_log_with_spline_clean```. The plots looked almost identical, indicating that neither model formulation offered a clear advantage in explaining the spatial patterns or reducing the problematic residuals in the coastal and southeastern areas. The ANOVA provides statistical backing for this visual observation.
+
+
+```{r}
+library(ape)
+library(fields)
+library(gstat)
+```
+
+```{r}
+coords <- cbind(lupus_ppp$x, lupus_ppp$y)
+
+elev_values <- elev_clean[lupus_ppp]
+
+
+dist_mat <- fields::rdist(coords)
+
+# Inverse distance weights (avoid division by zero)
+#inv_dist <- 1 / dist_mat
+
+#diag(inv_dist) <- 0  # set self-distances to 0 (avoid Inf)
+
+
+ape::Moran.I(elev_values, weight = dist_mat)
+
+```
+
+```{r}
+# Extract coordinates from lupus_ppp
+coords <- coords(lupus_ppp)
+
+# Extract elevation values at those locations
+elev_values <- elev_clean[lupus_ppp]
+
+# Combine into a data frame
+DATA <- data.frame(Z_s = elev_values,
+                   x = coords[,1],
+                   y = coords[,2])
+
+# Convert to SpatialPointsDataFrame
+sp::coordinates(DATA) <- ~x+y
+
+# Calculate empirical variogram
+vg <- gstat :: variogram (Z_s ~ 1, data = DATA )
+# object of class = " gstatVariogram "
+plot ( vg )
+```
+
+```{r}
+# Fit linear correlation model
+fit.linear <- fit.variogram (vg , vgm ("Lin"))
+fit.linear
+# Plot the empirical and fitted variogram
+plot(vg, fit.linear, main = "Fitted Linear Variogram")
+```
+
+```{r}
+fit.spherical <- fit.variogram(vg, vgm("Sph"))
+fit.spherical
+plot(vg, fit.spherical, main = "Fitted spherical Variogram")
+```
+
+```{r}
+# Fit Gaussian correlation model
+fit.Gaussian <- fit.variogram (vg , vgm ("Gau"))
+fit.Gaussian
+plot(vg, fit.Gaussian, main = "Fitted Gaussian Variogram")
+```
+
+```{r}
+# Fit exponential correlation model
+fit.exponential <- fit.variogram (vg , vgm ("Exp"))
+fit.exponential
+plot(vg, fit.exponential, main = "Fitted exponential Variogram")
 ```
 
 
 ```{r}
-max(models_aci)
+# Fit nugget only model
+fit.nugget <- fit.variogram (vg , vgm ("Nug"))
+fit.nugget
+plot(vg, fit.nugget, main = "Fitted nugget Variogram")
 ```
-
-
 
 ```{r}
-#Plot the model predictions
-plot(clean_fit,
-     se = FALSE,
-     superimpose = FALSE,
-     main = "Estimated Canis Lupus intensity")
+# Initialize list to store results
+model_list <- list(
+  spherical = fit.spherical,
+  linear = fit.linear,
+  Gaussian = fit.Gaussian,
+  exponential = fit.exponential,
+  nugget = fit.nugget
+)
 
-#Overlay the B. pendula locations
-plot(lupus_ppp,
-     pch = 16,
-     cex = 0.6,
-     cols = "white",
-     add = TRUE)
+# Extract SSErr safely
+model_names <- c()
+sse_values <- c()
+
+for (name in names(model_list)) {
+  fit <- model_list[[name]]
+  sse <- tryCatch(attr(fit, "SSErr"), error = function(e) NA)
+  
+  if (!is.null(sse) && !is.na(sse)) {
+    model_names <- c(model_names, name)
+    sse_values <- c(sse_values, sse)
+  }
+}
+
+# Create and order results
+results <- data.frame(model = model_names, SSErr = sse_values)
+results <- results[order(results$SSErr), ]
+
+# Print
+print(results)
 ```
 
+```{r}
+# Get fitted values from the linear variogram model
+fitted <- variogramLine(fit.linear,
+                        maxdist = max(vg$dist),
+                        dist_vector = vg$dist)
 
+# Calculate residuals
+residuals <- fitted$gamma - vg$gamma
 
+# Visualize the residuals
+plot(residuals ~ fitted$gamma,
+     main = "Residuals vs Fitted (Linear Variogram)",
+     xlab = "Fitted γ",
+     ylab = "Residuals",
+     pch = 19,
+     col = "#046C9A")
+abline(h = 0, lty = 2, col = "gray")
+
+```
 
